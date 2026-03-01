@@ -52,3 +52,9 @@ jobs:
         draft: true
         files: hadesmem-${{ matrix.toolset }}-${{ matrix.configuration }}-${{ matrix.platform }}.zip
         fail_on_unmatched_files: true
+
+    - uses: actions/upload-artifact@v2
+      with:	
+        name: hadesmem-${{ matrix.toolset }}-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: ${{ github.workspace }}/artifact/**/*
+        retention-days: 8
