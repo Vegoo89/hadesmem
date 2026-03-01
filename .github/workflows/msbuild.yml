@@ -34,24 +34,14 @@ jobs:
 
     - name: Setup Artifact
       working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: |
-        $artifact = "hadesmem-${{ matrix.toolset }}-${{ matrix.configuration }}-${{ matrix.platform }}"
-        mkdir $artifact
-        mkdir $artifact\lib
-        copy build\vs\${{ matrix.configuration }}\${{ matrix.platform }}\*.lib $artifact\lib
-        xcopy /s /i include $artifact\include
-        xcopy /s /i deps\asmjit\asmjit\src\asmjit\*.h $artifact\deps\asmjit\asmjit\src\asmjit
-        xcopy /s /i deps\udis86\udis86\*.h $artifact\deps\udis86\udis86
-        xcopy /s /i deps\pugixml\pugixml\src\*.?pp $artifact\deps\pugixml\pugixml\src
-        Compress-Archive $artifact hadesmem-${{ matrix.toolset }}-${{ matrix.configuration }}-${{ matrix.platform }}.zip
-
-    - uses: softprops/action-gh-release@v1
-      name: Upload assets to release
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        draft: true
-        files: hadesmem-${{ matrix.toolset }}-${{ matrix.configuration }}-${{ matrix.platform }}.zip
-        fail_on_unmatched_files: true
+      run: |	
+        mkdir artifact
+        mkdir artifact\lib
+        copy build\vs\${{ matrix.configuration }}\${{ matrix.platform }}\*.lib artifact\lib
+        xcopy /s /i include artifact\include
+        xcopy /s /i deps\asmjit\asmjit\src\asmjit\*.h artifact\deps\asmjit\asmjit\src\asmjit
+        xcopy /s /i deps\udis86\udis86\*.h artifact\deps\udis86\udis86
+        xcopy /s /i deps\pugixml\pugixml\src\*.?pp artifact\deps\pugixml\pugixml\src
 
     - uses: actions/upload-artifact@v4
       with:	
