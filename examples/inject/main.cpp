@@ -67,6 +67,11 @@ int main(int argc, char* argv[])
       cmd};
     TCLAP::SwitchArg add_path_arg{
       "", "add-path", "Add module dir to (remote) search order", cmd};
+    TCLAP::SwitchArg manual_map_arg{
+      "",
+      "manual-map",
+      "Perform reflective/manual mapping instead of using the loader",
+      cmd};
     TCLAP::ValueArg<std::string> export_arg{
       "",
       "export",
@@ -148,6 +153,10 @@ int main(int argc, char* argv[])
     if (add_path)
     {
       flags |= hadesmem::InjectFlags::kAddToSearchOrder;
+    }
+    if (manual_map_arg.isSet())
+    {
+      flags |= hadesmem::InjectFlags::kManualMap;
     }
 
     bool const has_pid = pid_arg.isSet();

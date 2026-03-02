@@ -3,6 +3,7 @@
 
 #include <hadesmem/injector.hpp>
 #include <hadesmem/injector.hpp>
+#include <hadesmem/alloc.hpp>
 #include <hadesmem/detail/pe_utils.hpp>
 
 #include <hadesmem/detail/warning_disable_prefix.hpp>
@@ -165,6 +166,92 @@ void TestInjector()
 
   // Free kernel32.dll in remote process.
   hadesmem::FreeDll(process, kernel32_mod_new_2);
+
+  // Manual mapping tests
+  {
+    // map kernel32 again using the manual loader and call an export
+    HMODULE const manual_mod =
+      hadesmem::InjectDll(process,
+                           L"kernel32.dll",
+                           hadesmem::InjectFlags::kManualMap);
+    BOOST_TEST_NE(manual_mod, static_cast<HMODULE>(nullptr));
+
+    SetLastError(0);
+    auto const manual_ret =
+      CallExport(process, manual_mod, "GetCurrentProcessId");
+    BOOST_TEST_EQ(manual_ret.GetReturnValue(), GetCurrentProcessId());
+    BOOST_TEST_EQ(manual_ret.GetLastError(), 0UL);
+
+    // free the manually allocated memory rather than calling FreeDll
+    hadesmem::Free(process, manual_mod);
+  }
+
+  {
+    // architecture mismatch using manual map should also produce error
+    std::wstring mismatch_path;
+    std::vector<std::wstring> candidates;
+    wchar_t sys_dir[MAX_PATH]{};
+    UINT const sys_len = ::GetSystemDirectoryW(sys_dir, MAX_PATH);
+    if (sys_len && sys_len < MAX_PATH)
+    {
+      candidates.emplace_back(sys_dir);
+      candidates.back() += L"\\kernel32.dll";
+    }
+
+    UINT wow64_len = ::GetSystemWow64DirectoryW(nullptr, 0);
+    if (wow64_len)
+    {
+      std::wstring wow64_dir;
+      wow64_dir.resize(wow64_len);
+      if (::GetSystemWow64DirectoryW(&wow64_dir[0], wow64_len) &&
+          wow64_dir.size())
+      {
+        if (wow64_dir.back() == L'\0')
+          wow64_dir.pop_back();
+        candidates.emplace_back(wow64_dir + L"\\kernel32.dll");
+      }
+    }
+
+    for (auto const& cand : candidates)
+    {
+      if (!hadesmem::detail::DoesFileExist(cand))
+      {
+        continue;
+      }
+
+      try
+      {
+        bool const file64 = hadesmem::detail::IsFile64Bit(cand);
+        bool const proc64 = hadesmem::detail::IsProcess64Bit(process);
+        if (file64 != proc64)
+        {
+          mismatch_path = cand;
+          break;
+        }
+      }
+      catch (...)
+      {
+      }
+    }
+
+    if (!mismatch_path.empty())
+    {
+      bool caught = false;
+      try
+      {
+        hadesmem::InjectDll(process,
+                             mismatch_path,
+                             hadesmem::InjectFlags::kManualMap);
+      }
+      catch (hadesmem::Error const& e)
+      {
+        caught = true;
+        std::string const what = e.what();
+        BOOST_TEST_NE(what.find("architecture"), std::string::npos);
+      }
+      BOOST_TEST(caught);
+    }
+  }
 
   {
     std::vector<std::wstring> args;
