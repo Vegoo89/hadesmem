@@ -30,6 +30,7 @@
 #include <hadesmem/module.hpp>
 #include <hadesmem/process.hpp>
 #include <hadesmem/write.hpp>
+#include <hadesmem/detail/pe_utils.hpp>
 
 // TODO: IAT based injection. Required to allow injection before DllMain etc. of
 // other moudles are executed. Include support for .NET target processes.
@@ -134,6 +135,40 @@ inline HMODULE InjectDll(Process const& process,
     HADESMEM_DETAIL_THROW_EXCEPTION(
       Error() << ErrorString("Cannot modify search order unless an absolute "
                              "path or path resolution is used."));
+  }
+
+  // If the file exists locally perform a quick sanity check to ensure the
+  // module's machine type matches the target process.  This detects the
+  // common "wrong bitness" mistake which otherwise results in a very
+  // unhelpful "LoadLibraryExW failed (remote GetLastError returned 0)".
+  //
+  // We intentionally don't make this a hard requirement when the file is
+  // missing; LoadLibraryExW will report the error in that case.  Likewise we
+  // don't attempt to validate the path when path resolution is disabled and the
+  // caller gave a relative path because the remote process may resolve that
+  // differently than we can locally.
+  if (detail::DoesFileExist(path_real))
+  {
+    try
+    {
+      bool const file64 = detail::IsFile64Bit(path_real);
+      bool const proc64 = detail::IsProcess64Bit(process);
+      if (file64 != proc64)
+      {
+        std::string arch_err = "Module architecture does not match target ";
+        arch_err += proc64 ? "process (process is 64-bit)" :
+                             "process (process is 32-bit)";
+        arch_err += ": ";
+        arch_err += file64 ? "DLL is 64-bit" : "DLL is 32-bit";
+        arch_err += ".";
+        HADESMEM_DETAIL_THROW_EXCEPTION(
+          Error{} << ErrorString{arch_err});
+      }
+    }
+    catch (...) // if something goes wrong while probing just ignore it and
+                // let the loader handle the error later.
+    {
+    }
   }
 
   // Only performing this check when path resolution is enabled

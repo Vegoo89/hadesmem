@@ -3,6 +3,7 @@
 
 #include <hadesmem/injector.hpp>
 #include <hadesmem/injector.hpp>
+#include <hadesmem/detail/pe_utils.hpp>
 
 #include <hadesmem/detail/warning_disable_prefix.hpp>
 #include <boost/detail/lightweight_test.hpp>
@@ -71,6 +72,82 @@ void TestInjector()
                     std::string::npos);
     }
     BOOST_TEST(caught);
+  }
+
+  // If we can locate a real system DLL with the opposite bitness to the
+  // current process we should get an informative architecture mismatch error.
+  {
+    std::wstring mismatch_path;
+    // gather candidate DLLs to examine
+    {
+      std::vector<std::wstring> candidates;
+      wchar_t sys_dir[MAX_PATH]{};
+      UINT const sys_len = ::GetSystemDirectoryW(sys_dir, MAX_PATH);
+      if (sys_len && sys_len < MAX_PATH)
+      {
+        candidates.emplace_back(sys_dir);
+        candidates.back() += L"\\kernel32.dll";
+      }
+
+      // attempt to query the WoW64 directory, if available
+      UINT wow64_len = ::GetSystemWow64DirectoryW(nullptr, 0);
+      if (wow64_len)
+      {
+        std::wstring wow64_dir;
+        wow64_dir.resize(wow64_len);
+        if (::GetSystemWow64DirectoryW(&wow64_dir[0], wow64_len) &&
+            wow64_dir.size())
+        {
+          // strip possible trailing null
+          if (wow64_dir.back() == L'\0')
+            wow64_dir.pop_back();
+          candidates.emplace_back(wow64_dir + L"\\kernel32.dll");
+        }
+      }
+
+      for (auto const& cand : candidates)
+      {
+        if (!hadesmem::detail::DoesFileExist(cand))
+        {
+          continue;
+        }
+
+        try
+        {
+          bool const file64 =
+            hadesmem::detail::IsFile64Bit(cand);
+          bool const proc64 =
+            hadesmem::detail::IsProcess64Bit(process);
+          if (file64 != proc64)
+          {
+            mismatch_path = cand;
+            break;
+          }
+        }
+        catch (...)
+        {
+          // ignore and continue
+        }
+      }
+    }
+
+    if (!mismatch_path.empty())
+    {
+      bool caught = false;
+      try
+      {
+        hadesmem::InjectDll(process,
+                             mismatch_path,
+                             hadesmem::InjectFlags::kNone);
+      }
+      catch (hadesmem::Error const& e)
+      {
+        caught = true;
+        std::string const what = e.what();
+        BOOST_TEST_NE(what.find("architecture"), std::string::npos);
+      }
+      BOOST_TEST(caught);
+    }
   }
 
   // Call Kernel32.dll!GetCurrentProcessId and ensure the return value and
