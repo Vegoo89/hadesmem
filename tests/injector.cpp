@@ -52,6 +52,27 @@ void TestInjector()
     hadesmem::InjectDll(process, L"kernel32.dll", hadesmem::InjectFlags::kNone);
   BOOST_TEST_EQ(kernel32_mod, kernel32_mod_new);
 
+  // Attempt to inject a non‑existent module.  The resulting exception should
+  // mention the path we attempted to load so callers can diagnose problems
+  // (e.g. wrong working directory, missing file, architecture mismatch).
+  {
+    bool caught = false;
+    try
+    {
+      hadesmem::InjectDll(process,
+                           L"this_dll_does_not_exist.dll",
+                           hadesmem::InjectFlags::kNone);
+    }
+    catch (hadesmem::Error const& e)
+    {
+      caught = true;
+      std::string const what = e.what();
+      BOOST_TEST_NE(what.find("this_dll_does_not_exist.dll"),
+                    std::string::npos);
+    }
+    BOOST_TEST(caught);
+  }
+
   // Call Kernel32.dll!GetCurrentProcessId and ensure the return value and
   // last error code are their expected values.
   SetLastError(0);

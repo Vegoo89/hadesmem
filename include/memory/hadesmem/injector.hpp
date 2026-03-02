@@ -178,11 +178,39 @@ inline HMODULE InjectDll(Process const& process,
          static_cast<LPCWSTR>(lib_file_remote.GetBase()),
          __nullptr, // Can't use nullptr here because /clr...
          add_path ? LOAD_WITH_ALTERED_SEARCH_PATH : 0UL);
+
   if (!load_library_ret.GetReturnValue())
   {
+    // Build a slightly more detailed message so users can diagnose
+    // mysterious failures (remote GetLastError may be zero).
+    std::string err_msg = "LoadLibraryExW failed";
+    try
+    {
+      if (!path_real.empty())
+      {
+        bool lossy = false;
+        auto path_str = detail::WideCharToMultiByte(path_real, &lossy);
+        err_msg += ": ";
+        err_msg += path_str;
+        if (lossy)
+        {
+          err_msg += " (lossy conversion)";
+        }
+      }
+    }
+    catch (...) // conversion shouldn't throw, but be defensive
+    {
+    }
+
+    auto const last_error = load_library_ret.GetLastError();
+    if (last_error == 0)
+    {
+      err_msg += " (remote GetLastError returned 0)";
+    }
+
     HADESMEM_DETAIL_THROW_EXCEPTION(
-      Error{} << ErrorString{"LoadLibraryExW failed."}
-              << ErrorCodeWinLast{load_library_ret.GetLastError()});
+      Error{} << ErrorString{err_msg}
+              << ErrorCodeWinLast{last_error});
   }
 
   return load_library_ret.GetReturnValue();
