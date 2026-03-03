@@ -3,6 +3,7 @@
 
 #include <hadesmem/module.hpp>
 #include <hadesmem/module.hpp>
+#include <hadesmem/detail/toolhelp.hpp>
 
 #include <utility>
 
@@ -44,6 +45,19 @@ void TestModule()
   BOOST_TEST_THROWS((hadesmem::Module{process, L""}), hadesmem::Error);
 
   hadesmem::Module const ntdll_mod{process, L"NtDll.DlL"};
+
+  // verify PEB-based lookup returns the same base address.  This exercises the
+  // snapshot-fallback code path even on systems where snapshots succeed.
+  {
+    auto const peb_entry =
+      hadesmem::detail::GetModuleEntryFromPeb(process, L"ntdll.dll", false);
+    BOOST_TEST(peb_entry);
+    if (peb_entry)
+    {
+      BOOST_TEST_EQ(ntdll_mod.GetHandle(),
+                    reinterpret_cast<HMODULE>(peb_entry->modBaseAddr));
+    }
+  }
   BOOST_TEST_NE(ntdll_mod, this_mod);
   BOOST_TEST_EQ(ntdll_mod.GetHandle(), ::GetModuleHandleW(L"ntdll.dll"));
   BOOST_TEST_NE(ntdll_mod.GetSize(), 0U);
