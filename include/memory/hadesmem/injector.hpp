@@ -240,7 +240,7 @@ inline HMODULE ManualMapDll(Process const& process,
     for (WORD i = 0; i < num_sections; ++i)
     {
       DWORD const va = sections[i].VirtualAddress;
-      DWORD const size = std::max(sections[i].SizeOfRawData,
+      DWORD const size = (std::max)(sections[i].SizeOfRawData,
                                  sections[i].Misc.VirtualSize);
       if (rva >= va && rva < va + size)
       {
@@ -389,7 +389,7 @@ inline HMODULE ManualMapDll(Process const& process,
                  CallConv::kStdCall,
                  lib_handle,
                  MAKEINTRESOURCEA(ord));
-          func_addr = proc_ret.GetReturnValue();
+          func_addr = reinterpret_cast<DWORD_PTR>(proc_ret.GetReturnValue());
         }
         else
         {
@@ -406,7 +406,7 @@ inline HMODULE ManualMapDll(Process const& process,
                  CallConv::kStdCall,
                  lib_handle,
                  static_cast<LPCSTR>(fn_remote.GetBase()));
-          func_addr = proc_ret.GetReturnValue();
+          func_addr = reinterpret_cast<DWORD_PTR>(proc_ret.GetReturnValue());
         }
 
         if (!func_addr)
