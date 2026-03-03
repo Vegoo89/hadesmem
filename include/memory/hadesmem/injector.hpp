@@ -441,17 +441,23 @@ inline HMODULE ManualMapDll(Process const& process,
       reinterpret_cast<PDWORD_PTR>(tls->AddressOfCallBacks);
     if (callbacks)
     {
+      // TLS callbacks are defined as: void CALLBACK Callback(PVOID DllHandle,
+      //                                         DWORD Reason,
+      //                                         PVOID Reserved);
+      using TlsCallbackFn = void(WINAPI*)(PVOID, DWORD, PVOID);
+
       for (; *callbacks; ++callbacks)
       {
-        auto const cb_addr = reinterpret_cast<decltype(&LoadLibraryExW)>(
+        auto const cb_addr = reinterpret_cast<TlsCallbackFn>(
           *callbacks + reinterpret_cast<DWORD_PTR>(remote.GetBase()) -
           nt_hdrs->OptionalHeader.ImageBase);
+        // return value is ignored
         Call(process,
              cb_addr,
              CallConv::kStdCall,
-             reinterpret_cast<HINSTANCE>(remote.GetBase()),
+             reinterpret_cast<PVOID>(remote.GetBase()),
              DLL_PROCESS_ATTACH,
-             0);
+             static_cast<PVOID>(nullptr));
       }
     }
   }
@@ -462,8 +468,10 @@ inline HMODULE ManualMapDll(Process const& process,
     DWORD const entry_rva = nt_hdrs->OptionalHeader.AddressOfEntryPoint;
     if (entry_rva)
     {
+      using DllMainFn = BOOL(WINAPI*)(HINSTANCE, DWORD, LPVOID);
+
       auto const entry_addr =
-        reinterpret_cast<decltype(&LoadLibraryExW)>(
+        reinterpret_cast<DllMainFn>(
           reinterpret_cast<std::uint8_t*>(remote.GetBase()) + entry_rva);
       auto const entry_ret =
         Call(process,
@@ -471,7 +479,7 @@ inline HMODULE ManualMapDll(Process const& process,
              CallConv::kStdCall,
              reinterpret_cast<HINSTANCE>(remote.GetBase()),
              DLL_PROCESS_ATTACH,
-             0);
+             static_cast<LPVOID>(nullptr));
       if (!entry_ret.GetReturnValue())
       {
         HADESMEM_DETAIL_THROW_EXCEPTION(
